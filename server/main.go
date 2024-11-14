@@ -4,7 +4,16 @@ import (
 	"net/http"
 	"io/ioutil"
 	"encoding/json"
+	"log"
+	"time"
+	"os"
+	"database/sql"
+	"context"
+	"errors"
+	_ "github.com/mattn/go-sqlite3"
 )
+
+var DB *sql.DB
 
 type PriceQuote struct {
 	USDBRL struct {
@@ -41,18 +50,31 @@ func getQuoteHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	//w.WriteHeader(http.StatusOk)
+	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(quote)
 }
 
 func getPriceQuote() (*PriceQuote, error) {
-	resp, e := http.Get("https://economia.awesomeapi.com.br/json/last/USD-BRL")
+	ctx, cancel := context.WithTimeout(context.Background(), 200 * time.Millisecond)
+	defer cancel()
+
+	req, e := http.NewRequestWithContext(ctx, "GET", "https://economia.awesomeapi.com.br/json/last/USD-BRL", nil)
 	if e != nil {
 		return nil, e
 	}
-	defer resp.Body.Close()
 
-	body, e := ioutil.ReadAll(resp.Body)
+	res, e := http.DefaultClient.Do(req)
+	if e != nil {
+		if errors.Is(e, context.DeadlineExceeded) {
+			log.SetOutput(os.Stdout)
+			log.Println("A request para \"https://economia.awesomeapi.com.br/json/last/USD-BRL\" excedeu o tempo limite de 200 ms.")
+		}
+
+		return nil, e
+	}
+	defer res.Body.Close()
+
+	body, e := ioutil.ReadAll(res.Body)
 	if e != nil {
 		return nil, e
 	}
@@ -63,5 +85,43 @@ func getPriceQuote() (*PriceQuote, error) {
 		return nil, e
 	}
 
+	saveQuote(&quote)
+
 	return &quote, nil
+}
+
+func saveQuote(quote *PriceQuote) {
+	DB, e := sql.Open("sqlite3", "./server/quotes.db")
+	if e != nil {
+		log.Fatal(e)
+	}
+	defer DB.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+
+	query := "INSERT INTO dollars (code, codein, name, high, low, varBid, pctChange, bid, ask, timestamp, create_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+	_, e = DB.ExecContext(
+		ctx,
+		query,
+		quote.USDBRL.Code,
+		quote.USDBRL.Codein,
+		quote.USDBRL.Name,
+		quote.USDBRL.High,
+		quote.USDBRL.Low,
+		quote.USDBRL.VarBid,
+		quote.USDBRL.PctChange,
+		quote.USDBRL.Bid,
+		quote.USDBRL.Ask,
+		quote.USDBRL.Timestamp,
+		quote.USDBRL.CreateDate,
+	)
+	if e != nil {
+		if errors.Is(e, context.DeadlineExceeded) {
+			log.SetOutput(os.Stdout)
+			log.Println("A operação de inserção excedeu o tempo limite de 10 ms.")
+		} else {
+			log.Fatal(e)
+		}
+	}
 }
