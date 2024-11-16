@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"log"
 	"time"
-	"os"
 	"database/sql"
 	"context"
 	"errors"
@@ -36,11 +35,11 @@ func getQuoteHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(quote.USDBRL)
+	json.NewEncoder(w).Encode(quote)
 }
 
 func getPriceQuote() (*entity.PriceQuote, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 300 * time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 200 * time.Millisecond)
 	defer cancel()
 
 	req, e := http.NewRequestWithContext(ctx, "GET", "https://economia.awesomeapi.com.br/json/last/USD-BRL", nil)
@@ -51,7 +50,6 @@ func getPriceQuote() (*entity.PriceQuote, error) {
 	res, e := http.DefaultClient.Do(req)
 	if e != nil {
 		if errors.Is(e, context.DeadlineExceeded) {
-			log.SetOutput(os.Stdout)
 			log.Println("A request para \"https://economia.awesomeapi.com.br/json/last/USD-BRL\" excedeu o tempo limite de 200 ms.")
 		}
 
@@ -103,7 +101,6 @@ func saveQuote(quote *entity.PriceQuote) {
 	)
 	if e != nil {
 		if errors.Is(e, context.DeadlineExceeded) {
-			log.SetOutput(os.Stdout)
 			log.Println("A operação de inserção excedeu o tempo limite de 10 ms.")
 		} else {
 			log.Fatal(e)
