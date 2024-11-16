@@ -10,35 +10,20 @@ import (
 	"database/sql"
 	"context"
 	"errors"
+	"github.com/sk8sta13/client-server-api/entity"
 	_ "github.com/mattn/go-sqlite3"
 )
 
 var DB *sql.DB
 
-type PriceQuote struct {
-	USDBRL struct {
-		Code       string `json:"code"`
-		Codein     string `json:"codein"`
-		Name       string `json:"name"`
-		High       string `json:"high"`
-		Low        string `json:"low"`
-		VarBid     string `json:"varBid"`
-		PctChange  string `json:"pctChange"`
-		Bid        string `json:"bid"`
-		Ask        string `json:"ask"`
-		Timestamp  string `json:"timestamp"`
-		CreateDate string `json:"create_date"`
-	} `json:"USDBRL"`
-}
-
 func main() {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", getQuoteHandler)
+	mux.HandleFunc("/cotacao", getQuoteHandler)
 	http.ListenAndServe(":8080", mux)
 }
 
 func getQuoteHandler(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
+	if r.URL.Path != "/cotacao" {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
@@ -51,11 +36,11 @@ func getQuoteHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(quote)
+	json.NewEncoder(w).Encode(quote.USDBRL)
 }
 
-func getPriceQuote() (*PriceQuote, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 200 * time.Millisecond)
+func getPriceQuote() (*entity.PriceQuote, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 300 * time.Millisecond)
 	defer cancel()
 
 	req, e := http.NewRequestWithContext(ctx, "GET", "https://economia.awesomeapi.com.br/json/last/USD-BRL", nil)
@@ -79,7 +64,7 @@ func getPriceQuote() (*PriceQuote, error) {
 		return nil, e
 	}
 
-	var quote PriceQuote
+	var quote entity.PriceQuote
 	e = json.Unmarshal(body, &quote)
 	if e != nil {
 		return nil, e
@@ -90,7 +75,7 @@ func getPriceQuote() (*PriceQuote, error) {
 	return &quote, nil
 }
 
-func saveQuote(quote *PriceQuote) {
+func saveQuote(quote *entity.PriceQuote) {
 	DB, e := sql.Open("sqlite3", "./server/quotes.db")
 	if e != nil {
 		log.Fatal(e)
